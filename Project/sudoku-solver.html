@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sudoku Solver</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    /* ─── CSS Variables ─────────────────────────────────── */
+    :root {
+      --bg:         #0a0a0a;
+      --surface:    #141414;
+      --cell-bg:    #1c1c1c;
+      --cell-given: #111111;
+      --border-thin:  #2e2e2e;
+      --border-thick: #555555;
+      --accent:     #888888;
+      --accent-hi:  #cccccc;
+      --text:       #e8e8e8;
+      --text-dim:   #666666;
+      --error:      #c0392b;
+      --solved:     #27ae60;
+      --btn-bg:     #242424;
+      --btn-hover:  #333333;
+      --btn-active: #1a1a1a;
+      --radius:     6px;
+      --transition: 0.18s ease;
+    }
+
+    /* ─── Reset & Base ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    /* ─── Header ────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    header h1 {
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: clamp(1.4rem, 4vw, 2rem);
+      letter-spacing: 0.18em;
+      color: var(--accent-hi);
+      text-transform: uppercase;
+    }
+
+    header p {
+      margin-top: 6px;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      letter-spacing: 0.12em;
+    }
+
+    /* ─── Card wrapper ──────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border-thin);
+      border-radius: 12px;
+      padding: 28px 24px 24px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      width: min(520px, 100%);
+    }
+
+    /* ─── Grid ──────────────────────────────────────────── */
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 0;
+      border: 2px solid var(--border-thick);
+      border-radius: var(--radius);
+      overflow: hidden;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+    }
+
+    /* Each cell */
+    .cell {
+      background: var(--cell-bg);
+      border: 1px solid var(--border-thin);
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: clamp(0.9rem, 2.8vw, 1.3rem);
+      text-align: center;
+      outline: none;
+      caret-color: var(--accent-hi);
+      transition: background var(--transition), color var(--transition);
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    /* Thicker right borders at columns 3 and 6 */
+    .cell[data-col="2"],
+    .cell[data-col="5"] {
+      border-right: 2px solid var(--border-thick);
+    }
+
+    /* Thicker bottom borders at rows 3 and 6 */
+    .cell[data-row="2"],
+    .cell[data-row="5"] {
+      border-bottom: 2px solid var(--border-thick);
+    }
+
+    .cell:focus {
+      background: #252525;
+      color: var(--accent-hi);
+      box-shadow: inset 0 0 0 1px var(--accent);
+      z-index: 1;
+    }
+
+    /* Given (prefilled) cells */
+    .cell.given {
+      background: var(--cell-given);
+      color: var(--accent-hi);
+      font-weight: bold;
+    }
+
+    /* Solved cells highlighted briefly */
+    .cell.solved-anim {
+      animation: solvedPulse 0.5s ease forwards;
+    }
+
+    @keyframes solvedPulse {
+      0%   { background: #1a3a28; }
+      60%  { background: #1e4d31; }
+      100% { background: var(--cell-bg); }
+    }
+
+    /* ─── Status Message ────────────────────────────────── */
+    #status {
+      margin: 14px 0;
+      font-size: 0.78rem;
+      letter-spacing: 0.1em;
+      text-align: center;
+      min-height: 20px;
+      transition: color var(--transition);
+    }
+    #status.error  { color: var(--error); }
+    #status.success { color: var(--solved); }
+    #status.info   { color: var(--text-dim); }
+
+    /* ─── Buttons ───────────────────────────────────────── */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      flex: 1 1 0;
+      min-width: 80px;
+      padding: 11px 10px;
+      background: var(--btn-bg);
+      color: var(--text);
+      border: 1px solid var(--border-thick);
+      border-radius: var(--radius);
+      font-family: 'Orbitron', monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition:
+        background var(--transition),
+        border-color var(--transition),
+        transform 0.1s ease,
+        box-shadow var(--transition);
+    }
+
+    button:hover {
+      background: var(--btn-hover);
+      border-color: var(--accent-hi);
+      box-shadow: 0 2px 12px rgba(200,200,200,0.08);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      background: var(--btn-active);
+      transform: translateY(0);
+      box-shadow: none;
+    }
+
+    button#solveBtn {
+      border-color: #555;
+      color: #e0e0e0;
+    }
+
+    button#solveBtn:hover {
+      border-color: #aaa;
+      background: #2c2c2c;
+    }
+
+    /* ─── Footer ────────────────────────────────────────── */
+    footer {
+      margin-top: 22px;
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-align: center;
+    }
+
+    /* ─── Responsive ────────────────────────────────────── */
+    @media (max-width: 400px) {
+      .card { padding: 18px 12px; }
+      button { font-size: 0.55rem; padding: 10px 6px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Sudoku Solver</h1>
+    <p>Backtracking Algorithm &mdash; Fill &amp; Solve</p>
+  </header>
+
+  <div class="card">
+    <!-- 9×9 Grid injected by JS -->
+    <div id="grid"></div>
+
+    <!-- Status message -->
+    <div id="status" class="info">Enter a puzzle or load a sample.</div>
+
+    <!-- Action buttons -->
+    <div class="btn-row">
+      <button id="sampleBtn"  onclick="loadSample()">Sample</button>
+      <button id="solveBtn"   onclick="solvePuzzle()">Solve</button>
+      <button id="clearBtn"   onclick="clearGrid()">Clear</button>
+    </div>
+  </div>
+
+  <footer>Numbers 1-9 only &bull; Empty cells solved automatically</footer>
+
+  <script>
+    /* ════════════════════════════════════════════════════════
+       BUILD THE 9×9 GRID
+    ════════════════════════════════════════════════════════ */
+    const gridEl = document.getElementById('grid');
+
+    // Create 81 input elements
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        const inp = document.createElement('input');
+        inp.type          = 'text';        // text so we can control input
+        inp.inputMode     = 'numeric';     // mobile numeric keyboard
+        inp.maxLength     = 1;
+        inp.className     = 'cell';
+        inp.dataset.row   = row;
+        inp.dataset.col   = col;
+        inp.autocomplete  = 'off';
+
+        // Only allow digits 1-9; block everything else
+        inp.addEventListener('keydown', onKeyDown);
+        inp.addEventListener('input',   onInput);
+
+        gridEl.appendChild(inp);
+      }
+    }
+
+    /* Allow only 1-9 (and control keys) */
+    function onKeyDown(e) {
+      const allowed = ['Backspace','Delete','Tab','ArrowLeft','ArrowRight',
+                       'ArrowUp','ArrowDown','Home','End'];
+      if (allowed.includes(e.key)) return;
+      if (e.key >= '1' && e.key <= '9') return;
+      e.preventDefault();  // block everything else
+    }
+
+    /* Clean up any paste or autofill garbage */
+    function onInput(e) {
+      const val = e.target.value.replace(/[^1-9]/g, '');
+      e.target.value = val ? val[val.length - 1] : '';  // keep last valid digit
+      clearStatus();
+    }
+
+    /* ════════════════════════════════════════════════════════
+       HELPERS: Read / Write the grid
+    ════════════════════════════════════════════════════════ */
+
+    /** Return a 9×9 2-D array (0 = empty) from the DOM */
+    function readBoard() {
+      const board = Array.from({length: 9}, () => Array(9).fill(0));
+      document.querySelectorAll('.cell').forEach(inp => {
+        const r = +inp.dataset.row, c = +inp.dataset.col;
+        board[r][c] = inp.value ? parseInt(inp.value) : 0;
+      });
+      return board;
+    }
+
+    /** Write a 9×9 2-D array back to the DOM */
+    function writeBoard(board, originalBoard) {
+      document.querySelectorAll('.cell').forEach(inp => {
+        const r = +inp.dataset.row, c = +inp.dataset.col;
+        const val = board[r][c];
+        inp.value = val ? String(val) : '';
+
+        // Mark filled cells; animate newly solved ones
+        if (originalBoard[r][c] === 0 && val !== 0) {
+          inp.classList.remove('given');
+          inp.classList.add('solved-anim');
+          // Remove animation class after it finishes
+          inp.addEventListener('animationend', () => inp.classList.remove('solved-anim'), {once: true});
+        }
+      });
+    }
+
+    /* ════════════════════════════════════════════════════════
+       VALIDATION: Check board before solving
+    ════════════════════════════════════════════════════════ */
+
+    /** True if placing `num` at (row,col) is valid */
+    function isValid(board, row, col, num) {
+      // Check row
+      if (board[row].includes(num)) return false;
+
+      // Check column
+      for (let r = 0; r < 9; r++) {
+        if (board[r][col] === num) return false;
+      }
+
+      // Check 3×3 box
+      const boxRow = Math.floor(row / 3) * 3;
+      const boxCol = Math.floor(col / 3) * 3;
+      for (let r = boxRow; r < boxRow + 3; r++) {
+        for (let c = boxCol; c < boxCol + 3; c++) {
+          if (board[r][c] === num) return false;
+        }
+      }
+
+      return true;
+    }
+
+    /** Check entire board for conflicts (duplicate givens) */
+    function boardIsLegal(board) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          const num = board[r][c];
+          if (num === 0) continue;
+          // Temporarily blank the cell to check against the rest
+          board[r][c] = 0;
+          const ok = isValid(board, r, c, num);
+          board[r][c] = num;
+          if (!ok) return false;
+        }
+      }
+      return true;
+    }
+
+    /* ════════════════════════════════════════════════════════
+       BACKTRACKING SOLVER
+    ════════════════════════════════════════════════════════ */
+
+    /**
+     * Recursive backtracking.
+     * Mutates `board` in-place; returns true if solved.
+     */
+    function solve(board) {
+      // Find next empty cell
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (board[r][c] === 0) {
+            // Try digits 1-9
+            for (let num = 1; num <= 9; num++) {
+              if (isValid(board, r, c, num)) {
+                board[r][c] = num;         // place number
+                if (solve(board)) return true;  // recurse
+                board[r][c] = 0;           // backtrack
+              }
+            }
+            return false;  // no digit worked → backtrack further
+          }
+        }
+      }
+      return true;  // no empty cells left → solved!
+    }
+
+    /* ════════════════════════════════════════════════════════
+       BUTTON ACTIONS
+    ════════════════════════════════════════════════════════ */
+
+    /** Solve the current puzzle */
+    function solvePuzzle() {
+      const original = readBoard();
+
+      // Validate first
+      if (!boardIsLegal(original)) {
+        setStatus('Invalid puzzle — conflicts detected.', 'error');
+        return;
+      }
+
+      // Deep-copy so backtracking doesn't clobber original
+      const board = original.map(r => [...r]);
+
+      if (solve(board)) {
+        writeBoard(board, original);
+        setStatus('Puzzle solved successfully!', 'success');
+      } else {
+        setStatus('No solution exists for this puzzle.', 'error');
+      }
+    }
+
+    /** Clear every cell */
+    function clearGrid() {
+      document.querySelectorAll('.cell').forEach(inp => {
+        inp.value = '';
+        inp.classList.remove('given', 'solved-anim');
+        inp.disabled  = false;
+        inp.readOnly  = false;
+      });
+      clearStatus();
+    }
+
+    /** Load a known hard sample puzzle */
+    function loadSample() {
+      // 0 = empty cell
+      const sample = [
+        [5,3,0, 0,7,0, 0,0,0],
+        [6,0,0, 1,9,5, 0,0,0],
+        [0,9,8, 0,0,0, 0,6,0],
+
+        [8,0,0, 0,6,0, 0,0,3],
+        [4,0,0, 8,0,3, 0,0,1],
+        [7,0,0, 0,2,0, 0,0,6],
+
+        [0,6,0, 0,0,0, 2,8,0],
+        [0,0,0, 4,1,9, 0,0,5],
+        [0,0,0, 0,8,0, 0,7,9],
+      ];
+
+      clearGrid();
+
+      document.querySelectorAll('.cell').forEach(inp => {
+        const r = +inp.dataset.row, c = +inp.dataset.col;
+        const val = sample[r][c];
+        if (val !== 0) {
+          inp.value    = String(val);
+          inp.classList.add('given');
+          inp.readOnly = true;   // protect given cells from editing
+        }
+      });
+
+      setStatus('Sample puzzle loaded. Press Solve!', 'info');
+    }
+
+    /* ════════════════════════════════════════════════════════
+       STATUS HELPER
+    ════════════════════════════════════════════════════════ */
+    function setStatus(msg, type = 'info') {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className   = type;
+    }
+
+    function clearStatus() {
+      setStatus('Enter a puzzle or load a sample.', 'info');
+    }
+  </script>
+</body>
+</html>
